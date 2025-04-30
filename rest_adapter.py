@@ -15,7 +15,6 @@ class RestAdapter:
         self.__api_key = api_key
         self.__ssl_verify = ssl_verify
         self._logger = logger or logging.getLogger(__name__)
-        requests
         if not ssl_verify:
             # no inspection PyUnresolvedReferences
             requests.packages.urllib3.disable_warnings()
@@ -24,17 +23,30 @@ class RestAdapter:
         full_url = self.url + endpoint
         headers = {'x-api-key': self.__api_key}
 
+        log_line_pre = f"methode={http_method}, url={full_url}, params={end_point_params}"
+        log_line_post = ",".join((log_line_pre, "success={}, status_code={}, messaging={}"))
+
         try:
+            self._logger.debug(msg=log_line_pre)   # Not needed except for debugging
             response = requests.request(http_method, endpoint)
         except requests.exceptions.RequestException("Request not granted!") as e:
+            self._logger.error(msg=(str(e)))
             raise TheCatAPIException("Exiting") from e
         try:
             data = response.json()
-            if 200 <= response.status_code <= 299:
-                return Result(response.status_code, response.reason
-                              , data)
+
         except (ValueError, JSONDecodeError) as e:
-            raise TheCatAPIException('{response.status_code} :{response.reason}') from e
+            self._logger.error(msg=log_line_post.format(False, None, str(e)))
+            raise TheCatAPIException("Bad JSON in response") from e
+        is_success = 200 <= response.status_code <= 299
+        log_line = log_line_post.format(is_success, response.status_code, response.reason)
+        if is_success:
+            self._logger.debug(msg=log_line)
+            return Result(response.status_code,response.reason, data)
+        self._logger.error(msg=log_line)
+        raise TheCatAPIException(f'{response.status_code}:{response.reason}')
+
+
 
     def get(self, endpoint, end_point_params: Dict = None) -> Result:
         return self._do(http_method='GET', endpoint=endpoint, end_point_params=end_point_params)
